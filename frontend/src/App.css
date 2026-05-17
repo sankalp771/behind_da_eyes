@@ -65,12 +65,29 @@
   overflow-y: auto;
 }
 
-/* ── URL input row ───────────────────────────────────────────────────────── */
-.url-row {
+/* ── Config row (URL + Show Title side by side) ──────────────────────────── */
+.config-row {
   display: flex;
-  gap: 10px;
+  gap: 14px;
   width: 100%;
   max-width: 860px;
+}
+.config-field {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.config-label {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text-dim);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.config-input-row {
+  display: flex;
+  gap: 8px;
 }
 
 .url-input {
@@ -78,7 +95,7 @@
   background: var(--bg-surface);
   border: 1px solid rgba(255,255,255,0.08);
   border-radius: var(--radius);
-  padding: 10px 16px;
+  padding: 9px 14px;
   color: var(--text);
   font-size: 13px;
   outline: none;
@@ -94,15 +111,84 @@
   background: var(--gold-dim);
   border: 1px solid var(--gold-border);
   border-radius: var(--radius);
-  padding: 10px 20px;
+  padding: 9px 16px;
   color: var(--gold);
-  font-size: 13px;
-  font-weight: 500;
+  font-size: 12px;
+  font-weight: 600;
   white-space: nowrap;
   transition: background 0.2s, transform 0.15s;
+  letter-spacing: 0.03em;
 }
-.url-load-btn:hover { background: rgba(200,168,75,0.25); transform: translateY(-1px); }
-.url-load-btn:active { transform: translateY(0); }
+.url-load-btn:hover:not(:disabled) { background: rgba(200,168,75,0.25); transform: translateY(-1px); }
+.url-load-btn:active:not(:disabled) { transform: translateY(0); }
+.url-load-btn:disabled { opacity: 0.5; cursor: wait; }
+
+.file-load-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: var(--radius);
+  padding: 9px 14px;
+  color: var(--text-dim);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s, transform 0.15s;
+}
+.file-load-btn:hover {
+  background: rgba(255,255,255,0.08);
+  color: var(--text);
+  transform: translateY(-1px);
+}
+.file-load-btn input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+/* ── Character chips ─────────────────────────────────────────────────────── */
+.char-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  width: 100%;
+  max-width: 860px;
+  animation: fade-in 0.2s ease;
+}
+.char-chip {
+  padding: 5px 14px;
+  border-radius: 20px;
+  border: 1px solid rgba(255,255,255,0.1);
+  background: rgba(255,255,255,0.04);
+  color: var(--text-dim);
+  font-size: 12px;
+  font-weight: 500;
+  transition: all 0.2s;
+  cursor: pointer;
+}
+.char-chip.active {
+  border-color: var(--gold-border);
+  background: var(--gold-dim);
+  color: var(--gold);
+}
+.char-chip:hover:not(.active) {
+  border-color: rgba(255,255,255,0.2);
+  color: var(--text);
+  background: rgba(255,255,255,0.07);
+}
+
+/* ── Chars loading indicator ─────────────────────────────────────────────── */
+.chars-loading {
+  font-size: 12px;
+  color: var(--text-dim);
+  padding: 8px 0;
+  animation: pulse-dot 1.2s ease-in-out infinite;
+}
 
 /* ── Error message ───────────────────────────────────────────────────────── */
 .error-msg {
@@ -115,6 +201,14 @@
   border: 1px solid rgba(224,93,93,0.2);
   border-radius: 8px;
   animation: fade-in 0.2s ease;
+}
+
+.source-note {
+  color: var(--text-dim);
+  font-size: 12px;
+  max-width: 860px;
+  width: 100%;
+  margin-top: -4px;
 }
 
 /* ── Player wrapper ──────────────────────────────────────────────────────── */
@@ -148,6 +242,7 @@
   height: 100%;
   border: none;
   display: block;
+  background: #000;
 }
 
 /* Empty player state */
@@ -533,10 +628,12 @@
   .topbar-logo { font-size: 14px; }
   .topbar-status { display: none; }
 
-  .url-row { flex-direction: column; }
-  .url-load-btn { width: 100%; text-align: center; }
+  .config-row { flex-direction: column; gap: 10px; }
 
-  .modal-card { padding: 20px; }
+  .modal-card { padding: 20px; width: 96vw; }
 
   .response-text { font-size: 13px; }
+
+  .char-chips { gap: 4px; }
+  .char-chip { font-size: 11px; padding: 4px 10px; }
 }

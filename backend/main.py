@@ -1,3 +1,9 @@
+"""
+BehindTheEyes — API Backend
+
+Text-only. No voice, no image, no video composition.
+Dynamic character engine: works for any show, any character.
+"""
 import os
 import json
 from fastapi import FastAPI, HTTPException
@@ -8,100 +14,127 @@ from dotenv import load_dotenv
 from videodb import connect
 
 from videodb_utils import get_context_at_timestamp
-from characters import SERIES_REGISTRY, build_character_prompt, build_scene_prompt
+from engine import generate_character_list, build_character_prompt, build_scene_prompt
 
 load_dotenv()
 
-app = FastAPI()
+app = FastAPI(title="BehindTheEyes API")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
+# Load stored video/index IDs
 with open('config.json', 'r') as f:
     config = json.load(f)
 
 api_key = os.environ.get("VIDEO_DB_API_KEY")
 conn = connect(api_key=api_key)
 coll = conn.get_collection()
-video = coll.get_video(config["video_id"])
 
+# Cache the default video object
+_default_video = coll.get_video(config["video_id"])
+
+# In-memory cache for character lists (keyed by show_title)
+_char_cache: dict = {}
+
+
+def _get_video(video_id: str):
+    if video_id == config["video_id"]:
+        return _default_video
+    return coll.get_video(video_id)
+
+
+# ── Request Models ─────────────────────────────────────────────────────────────
 
 class AskRequest(BaseModel):
     timestamp: int
     question: str
+    show_title: str
     mode: Literal["character", "scene"] = "character"
-    character_key: Optional[str] = "light_yagami"
-    series_key: Optional[str] = "death_note"
-    # Fallback custom character (when not in registry)
-    custom_character_name: Optional[str] = None
-    custom_character_description: Optional[str] = None
+    character_name: Optional[str] = None   # exact name, no keys needed
     video_id: Optional[str] = None
     scene_index_id: Optional[str] = None
 
 
+# ── Endpoints ─────────────────────────────────────────────────────────────────
+
 @app.post("/api/ask")
 async def ask(req: AskRequest):
+    """
+    Main endpoint. Works for any show and any character.
+    Character profile is generated dynamically by Gemma 4.
+    """
     try:
-        vid_id = req.video_id or config["video_id"]
+        vid_id    = req.video_id    or config["video_id"]
         scene_idx = req.scene_index_id or config["scene_index_id"]
-        target_video = video if vid_id == config["video_id"] else coll.get_video(vid_id)
 
-        context = get_context_at_timestamp(target_video, scene_idx, req.timestamp, window=60)
-        scene_text = str(context["scene"].get('response', context["scene"])) if context["scene"] else "No visual context available."
-        transcript = context["transcript"] or "No dialogue in this window."
-
-        series = SERIES_REGISTRY.get(req.series_key, {})
-        series_context = series.get("series_context", "")
+        video   = _get_video(vid_id)
+        context = get_context_at_timestamp(video, scene_idx, req.timestamp, window=60)
+        scene   = context["scene"]
+        transcript = context["transcript"]
 
         if req.mode == "scene":
-            prompt = build_scene_prompt(scene_text, transcript, req.question, series_context)
-            responder = "Scene Companion"
+            prompt    = build_scene_prompt(req.show_title, scene, transcript, req.question)
+            responder = f"{req.show_title} — Scene"
         else:
-            # Resolve character
-            char_profile = series.get("characters", {}).get(req.character_key)
-
-            if char_profile:
-                prompt = build_character_prompt(char_profile, scene_text, transcript, req.question, series_context)
-                responder = char_profile["name"]
-            else:
-                # Custom character fallback
-                name = req.custom_character_name or "Unknown Character"
-                desc = req.custom_character_description or "A fictional character."
-                custom_profile = {"name": name, "profile": f"You are {name}.\n\n{desc}"}
-                prompt = build_character_prompt(custom_profile, scene_text, transcript, req.question, series_context)
-                responder = name
+            char_name = req.character_name or "the main character"
+            prompt    = build_character_prompt(req.show_title, char_name, scene, transcript, req.question)
+            responder = char_name
 
         result = coll.generate_text(prompt=prompt, model_name="ultra")
-        response_text = result.get("output", "").strip()
+        response_text = (result.get("output", "") if isinstance(result, dict) else str(result)).strip()
 
         return {
-            "response": response_text,
-            "responder": responder,
-            "mode": req.mode,
-            "timestamp": req.timestamp,
-            "player_url": None,
+            "response":   response_text,
+            "responder":  responder,
+            "mode":       req.mode,
+            "timestamp":  req.timestamp,
+            "show_title": req.show_title,
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/api/characters")
-async def get_characters(series_key: str = "death_note"):
-    series = SERIES_REGISTRY.get(series_key)
-    if not series:
-        raise HTTPException(status_code=404, detail=f"Series '{series_key}' not found")
-    return {
-        "series": series["name"],
-        "characters": [
-            {"key": k, "name": v["name"], "role": v["role"]}
-            for k, v in series["characters"].items()
-        ]
-    }
+async def get_characters(
+    show_title: str,
+    video_id: Optional[str] = None,
+    scene_index_id: Optional[str] = None,
+):
+    """
+    Dynamically generate the character list for any show.
+    Uses the video's indexed transcript + Gemma 4's knowledge of the show.
+    Result is cached in-memory per show title.
+    """
+    cache_key = show_title.strip().lower()
+    if cache_key in _char_cache:
+        return {"show_title": show_title, "characters": _char_cache[cache_key]}
+
+    try:
+        vid_id = video_id or config["video_id"]
+        video  = _get_video(vid_id)
+
+        # Get a representative transcript sample
+        transcript_lines = video.get_transcript()
+        transcript_text  = " ".join(
+            (l.get("text") or getattr(l, "text", "")).strip()
+            for l in transcript_lines
+        )
+
+        characters = generate_character_list(coll, show_title, transcript_text)
+        if characters:
+            _char_cache[cache_key] = characters
+
+        return {"show_title": show_title, "characters": characters}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.get("/api/series")
-async def get_series():
-    return [{"key": k, "name": v["name"]} for k, v in SERIES_REGISTRY.items()]
+@app.delete("/api/characters/cache")
+async def clear_character_cache():
+    """Clear the in-memory character cache (useful when switching shows)."""
+    _char_cache.clear()
+    return {"status": "cleared"}
 
 
 @app.get("/api/health")
 async def health():
-    return {"status": "ok"}
+    return {"status": "ok", "app": "BehindTheEyes"}

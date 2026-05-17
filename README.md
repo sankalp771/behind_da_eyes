@@ -1,30 +1,25 @@
-# CharacterOS
+# BehindTheEyes
 
-> Pause any anime. Ask a character. They'll talk back.
+Pause any show. Ask the characters. They talk back.
 
-CharacterOS is an interactive viewing experience built on [VideoDB](https://videodb.io). Upload any anime episode, pause it at any moment, and ask a character a question — or ask the scene itself what's happening. The AI responds with full knowledge of who the character is, what's happening on screen right now, and what was said in the last minute.
+BehindTheEyes uses [VideoDB](https://videodb.io) to index any video — transcript + scene analysis — then lets you ask questions at any timestamp. Pick a character and they respond as themselves, with full knowledge of who they are and what's happening. Or ask the scene directly for context, subtext, and what you might be missing.
 
-It's like watching anime with someone who's already seen it.
+Works for any show: Death Note, Mirzapur, Young Sheldon, Breaking Bad — anything.
 
 ---
 
-## Demo
+## How It Works
 
-**Two modes:**
+1. Upload any episode to VideoDB (transcript + scene indexing)
+2. Enter the show title — BehindTheEyes generates the character list dynamically using Gemma 4
+3. Pause at any moment, pick a character, ask a question
+4. The character responds as themselves — using the scene context + their full personality from the model's knowledge
 
-- **Character mode** — select a character from the episode (Light Yagami, L, Ryuk, Misa, Near...). They respond as themselves — with their full psychology, secrets, and relationships — directly to you.
-- **Scene mode** — a knowledgeable companion explains what's actually happening: subtext, character motivations, what you might be missing, themes.
-
-**Tested on:** Death Note Episode 6 — *Unraveling*
+**No hardcoded profiles.** Character knowledge comes from Gemma 4's understanding of the show, grounded by the actual scene description and transcript at that timestamp.
 
 ---
 
 ## Setup
-
-### Prerequisites
-- Python 3.10+
-- Node.js 18+
-- [VideoDB API key](https://videodb.io) (hackathon sandbox key)
 
 ### Backend
 
@@ -52,73 +47,70 @@ npm run dev
 
 Open `http://localhost:5173`
 
-### Ingest a new video
+### Ingest a New Video
 
 ```bash
 cd characteros/backend
 python ingest2.py
 ```
 
-This uploads the episode, indexes the transcript (Whisper) and scenes (GEMMA_4_31B at 60s intervals), and saves all IDs to `config.json`.
+Uploads the episode, indexes transcript (Whisper) and scenes (GEMMA_4_31B), saves IDs to `config.json`.
 
 ---
 
 ## VideoDB APIs Used
 
-| API | Purpose |
+| API | What it does in BehindTheEyes |
 |---|---|
-| `coll.upload(url=...)` | Upload full anime episode from URL |
-| `video.index_spoken_words()` | Whisper transcript across full episode |
-| `video.index_scenes(...)` | Visual scene analysis with GEMMA_4_31B at 60s intervals |
-| `video.get_transcript()` | Retrieve dialogue for a timestamp window |
-| `video.get_scene_index(id)` | Retrieve scene descriptions for context |
-| `coll.generate_text(prompt, model_name="ultra")` | Gemma 4 text generation for character responses |
+| `coll.upload(url=...)` | Upload any video from URL |
+| `video.index_spoken_words()` | Full episode transcript via Whisper |
+| `video.index_scenes(model, prompt, config)` | Scene-level visual analysis with Gemma 4 |
+| `video.get_transcript()` | Retrieve dialogue at a specific timestamp window |
+| `video.get_scene_index(id)` | Retrieve scene descriptions for visual context |
+| `coll.generate_text(prompt, model_name)` | Dynamic character list generation + in-character responses |
 
 ---
 
 ## Architecture
 
 ```
-User pauses video at timestamp T
-         │
-         ▼
-  POST /api/ask  {timestamp, question, mode, character_key}
-         │
-         ├── get_context_at_timestamp(video, scene_index_id, T, window=60)
-         │     ├── scene bucket from 60s scene index
-         │     └── transcript lines from last 60s
-         │
-         ├── build_character_prompt() or build_scene_prompt()
-         │     └── full character profile + scene + transcript + question
-         │
-         └── coll.generate_text(prompt, model_name="ultra")
-                   │
-                   ▼
-         Response displayed in card above player
+User pauses video at timestamp T, picks a character
+                    |
+                    v
+         POST /api/ask
+         { timestamp, question, show_title, character_name, mode }
+                    |
+      +-------------+-------------+
+      |                           |
+  get_scene(T)              get_transcript(T, window=60s)
+      |                           |
+      +-------------+-------------+
+                    |
+          build_character_prompt()
+          - Gemma 4's knowledge of the show + character
+          - Scene description from VideoDB
+          - Last 60s of dialogue from VideoDB
+          - User's question
+                    |
+                    v
+          coll.generate_text(prompt, model="ultra")
+                    |
+                    v
+          Response card in UI
 ```
+
+Two modes:
+- **Character** — the character talks to you as themselves
+- **Scene** — a knowledgeable companion explains what's happening
 
 ---
 
-## Adding a New Series
+## Adding Support for a New Video
 
-In `backend/characters.py`:
-
-```python
-SERIES_REGISTRY["attack_on_titan"] = {
-    "name": "Attack on Titan",
-    "series_context": "...",
-    "characters": {
-        "eren_yeager": {
-            "name": "Eren Yeager",
-            "role": "Protagonist",
-            "series": "Attack on Titan",
-            "profile": "You are Eren Yeager..."
-        }
-    }
-}
-```
-
-The frontend `/api/characters?series_key=attack_on_titan` will automatically serve the character list.
+1. Change the video URL in `ingest2.py`
+2. Run `python ingest2.py`
+3. It saves the new `video_id` and `scene_index_id` to `config.json`
+4. In the frontend, type the show title and hit "Set" — characters are generated automatically
 
 ---
 
@@ -127,19 +119,20 @@ The frontend `/api/characters?series_key=attack_on_titan` will automatically ser
 ```
 characteros/
 ├── backend/
-│   ├── main.py           # FastAPI — /api/ask, /api/characters, /api/series
-│   ├── characters.py     # Character profiles + prompt builders
-│   ├── videodb_utils.py  # Context retrieval + composition utilities
-│   ├── ingest2.py        # Ingest pipeline (upload → index)
-│   ├── config.json       # Live video/scene index IDs
+│   ├── main.py           # FastAPI — /api/ask, /api/characters
+│   ├── engine.py         # Dynamic prompt builders (character + scene mode)
+│   ├── videodb_utils.py  # Scene alignment + transcript retrieval
+│   ├── ingest2.py        # Upload + index pipeline
+│   ├── config.json       # Active video + scene index IDs
 │   └── .env.example
 ├── docs/
-│   └── progress.md       # Full build log
+│   └── progress.md
 └── frontend/
-    ├── vite.config.js    # Proxy /api → :8000
+    ├── vite.config.js    # Proxy /api -> :8000
     └── src/
-        ├── App.jsx       # Full UI
-        └── App.css       # Styles
+        ├── App.jsx       # Full UI — dynamic char list, mode toggle
+        ├── App.css       # Dark theme, gold accents, responsive
+        └── index.css     # CSS variables + reset
 ```
 
 ---

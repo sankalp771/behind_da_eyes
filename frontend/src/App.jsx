@@ -1,5 +1,33 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import './App.css'
+
+function normalizeVideoSource(url) {
+  const trimmed = url.trim()
+  if (!trimmed) return { kind: 'empty', src: '' }
+
+  try {
+    const parsed = new URL(trimmed)
+    const host = parsed.hostname.replace(/^www\./, '')
+
+    if (host === 'youtube.com' || host === 'm.youtube.com') {
+      const id = parsed.searchParams.get('v')
+      if (id) return { kind: 'iframe', src: `https://www.youtube.com/embed/${id}?rel=0&playsinline=1` }
+    }
+
+    if (host === 'youtu.be') {
+      const id = parsed.pathname.split('/').filter(Boolean)[0]
+      if (id) return { kind: 'iframe', src: `https://www.youtube.com/embed/${id}?rel=0&playsinline=1` }
+    }
+
+    if (/\.(mp4|webm|ogg|mov|m4v)(\?.*)?$/i.test(parsed.pathname)) {
+      return { kind: 'video', src: trimmed }
+    }
+  } catch {
+    return { kind: 'iframe', src: trimmed }
+  }
+
+  return { kind: 'iframe', src: trimmed }
+}
 
 // ── Top Bar ──────────────────────────────────────────────────────────────────
 function TopBar({ status }) {
@@ -8,7 +36,7 @@ function TopBar({ status }) {
     <header className="topbar">
       <div className="topbar-logo">
         <span className={`topbar-dot ${status === 'processing' ? 'processing' : ''}`} />
-        CharacterOS
+        BehindTheEyes
       </div>
       <span className="topbar-status">{labels[status] || status}</span>
     </header>
@@ -32,7 +60,7 @@ function ResponseCard({ responder, mode, response, onDismiss }) {
       <div className="response-header">
         <div className="response-meta">
           <span className="response-name">{responder}</span>
-          <span className="response-mode-badge">{mode === 'scene' ? 'scene analysis' : 'in character'}</span>
+          <span className="response-mode-badge">{mode === 'scene' ? 'scene' : 'in character'}</span>
         </div>
         <button className="response-close" onClick={onDismiss}>×</button>
       </div>
@@ -44,9 +72,7 @@ function ResponseCard({ responder, mode, response, onDismiss }) {
 // ── Ask Modal ────────────────────────────────────────────────────────────────
 function AskModal({
   mode, onModeChange,
-  characters, selectedChar, onCharChange,
-  customName, onCustomName,
-  customDesc, onCustomDesc,
+  characters, charsLoading, selectedChar, onCharChange,
   timestamp, onTimestampChange,
   question, onQuestionChange,
   onSubmit, onClose
@@ -57,10 +83,9 @@ function AskModal({
     return p.length === 2 ? (p[0] || 0) * 60 + (p[1] || 0) : (p[0] || 0) * 3600 + (p[1] || 0) * 60 + (p[2] || 0)
   }
 
-  const isCustom = selectedChar === '__custom__'
   const activeName = mode === 'scene'
     ? 'Scene Companion'
-    : (isCustom ? (customName || 'Character') : (characters.find(c => c.key === selectedChar)?.name || 'Character'))
+    : (characters.find(c => c.name === selectedChar)?.name || selectedChar || 'Character')
 
   return (
     <div className="modal-backdrop" onClick={e => e.target === e.currentTarget && onClose()}>
@@ -72,55 +97,44 @@ function AskModal({
 
         {/* Mode toggle */}
         <div className="mode-toggle">
-          <button
-            className={`mode-btn ${mode === 'character' ? 'active' : ''}`}
-            onClick={() => onModeChange('character')}
-          >Character</button>
-          <button
-            className={`mode-btn ${mode === 'scene' ? 'active' : ''}`}
-            onClick={() => onModeChange('scene')}
-          >Scene</button>
+          <button className={`mode-btn ${mode === 'character' ? 'active' : ''}`} onClick={() => onModeChange('character')}>
+            Character
+          </button>
+          <button className={`mode-btn ${mode === 'scene' ? 'active' : ''}`} onClick={() => onModeChange('scene')}>
+            Scene
+          </button>
         </div>
 
-        {/* Character selector (hidden in scene mode) */}
+        {/* Character selector */}
         {mode === 'character' && (
           <div className="modal-char-row">
-            <select
-              className="char-select"
-              value={selectedChar}
-              onChange={e => onCharChange(e.target.value)}
-            >
-              {characters.map(c => (
-                <option key={c.key} value={c.key}>{c.name} — {c.role}</option>
-              ))}
-              <option value="__custom__">+ Custom character...</option>
-            </select>
-          </div>
-        )}
-
-        {/* Custom character fields */}
-        {mode === 'character' && isCustom && (
-          <div className="custom-char-fields">
-            <input
-              className="char-edit-input"
-              placeholder="Character name"
-              value={customName}
-              onChange={e => onCustomName(e.target.value)}
-            />
-            <textarea
-              className="char-edit-desc"
-              placeholder="Who are they? Personality, backstory, relationships — the more detail the better."
-              value={customDesc}
-              onChange={e => onCustomDesc(e.target.value)}
-              rows={3}
-            />
+            {charsLoading ? (
+              <div className="chars-loading">Finding characters from Wikipedia and model knowledge...</div>
+            ) : characters.length === 0 ? (
+              <input
+                className="char-edit-input"
+                placeholder="Type a character name..."
+                value={selectedChar}
+                onChange={e => onCharChange(e.target.value)}
+              />
+            ) : (
+              <select
+                className="char-select"
+                value={selectedChar}
+                onChange={e => onCharChange(e.target.value)}
+              >
+                {characters.filter(c => c.key !== '__scene__').map(c => (
+                  <option key={c.key} value={c.name}>{c.name} — {c.role}</option>
+                ))}
+              </select>
+            )}
           </div>
         )}
 
         {/* Scene mode hint */}
         {mode === 'scene' && (
           <p className="scene-hint">
-            Ask anything about what's happening — context, character motivations, themes, what you might have missed.
+            Ask anything — what's happening, what you missed, character motivations, themes, foreshadowing.
           </p>
         )}
 
@@ -134,27 +148,19 @@ function AskModal({
             onBlur={e => onTimestampChange(parseTs(e.target.value))}
             onKeyDown={e => e.key === 'Enter' && onTimestampChange(parseTs(e.target.value))}
           />
-          <span className="modal-ts-hint">(edit if needed)</span>
         </div>
 
         {/* Question */}
         <textarea
           className="modal-input"
-          placeholder={
-            mode === 'scene'
-              ? "What's happening here? Why did that just happen? What am I missing?"
-              : `Ask ${activeName} anything...`
-          }
+          placeholder={mode === 'scene' ? "What's happening here?" : `Ask ${activeName} anything...`}
           value={question}
           onChange={e => onQuestionChange(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && !e.shiftKey && question.trim() && (e.preventDefault(), onSubmit())}
           autoFocus
         />
-
         <div className="modal-footer">
-          <button className="modal-submit" onClick={onSubmit} disabled={!question.trim()}>
-            Ask →
-          </button>
+          <button className="modal-submit" onClick={onSubmit} disabled={!question.trim()}>Ask →</button>
         </div>
       </div>
     </div>
@@ -162,22 +168,26 @@ function AskModal({
 }
 
 // ── Player Wrapper ────────────────────────────────────────────────────────────
-function PlayerWrapper({ url, status, processingLabel, onAskClick, responseReady }) {
+function PlayerWrapper({ source, status, processingLabel, onAskClick, responseReady }) {
+  const hasSource = Boolean(source?.src)
+
   return (
     <div className={`player-wrapper${responseReady ? ' response-ready' : ''}`}>
-      {url ? (
-        <iframe className="player-iframe" src={url} allow="autoplay; fullscreen" allowFullScreen title="CharacterOS Player" />
+      {hasSource && source.kind === 'video' ? (
+        <video className="player-iframe" src={source.src} controls playsInline title="BehindTheEyes Player" />
+      ) : hasSource ? (
+        <iframe className="player-iframe" src={source.src} allow="autoplay; fullscreen; picture-in-picture" allowFullScreen title="BehindTheEyes Player" />
       ) : (
         <div className="player-empty">
           <span className="player-empty-icon">▶</span>
-          <span>Paste a stream URL above to begin</span>
+          <span>Paste a video URL above to begin</span>
         </div>
       )}
       <div className="player-controls-overlay">
         {status === 'processing' ? (
           <ProcessingOverlay label={processingLabel} />
         ) : (
-          <button className="ask-btn" onClick={onAskClick} disabled={!url} title="Ask about this moment">?</button>
+          <button className="ask-btn" onClick={onAskClick} disabled={!hasSource} title="Ask about this moment">?</button>
         )}
       </div>
     </div>
@@ -186,19 +196,20 @@ function PlayerWrapper({ url, status, processingLabel, onAskClick, responseReady
 
 // ── App ───────────────────────────────────────────────────────────────────────
 export default function App() {
-  const DEFAULT_PLAYER_URL = import.meta.env.VITE_PLAYER_URL || ''
-  const DEFAULT_SERIES     = 'death_note'
+  // Video
+  const [inputUrl, setInputUrl]       = useState('')
+  const [playerSource, setPlayerSource] = useState({ kind: 'empty', src: '' })
+  const [fileName, setFileName]       = useState('')
 
-  const [inputUrl, setInputUrl]       = useState(DEFAULT_PLAYER_URL)
-  const [playerUrl, setPlayerUrl]     = useState(DEFAULT_PLAYER_URL)
+  // Show title — drives the whole engine
+  const [showTitle, setShowTitle]     = useState('')
 
-  // Character state
+  // Characters (dynamically generated)
   const [characters, setCharacters]   = useState([])
-  const [selectedChar, setSelectedChar] = useState('light_yagami')
-  const [customName, setCustomName]   = useState('')
-  const [customDesc, setCustomDesc]   = useState('')
+  const [charsLoading, setCharsLoading] = useState(false)
+  const [selectedChar, setSelectedChar] = useState('')
 
-  // Mode: 'character' | 'scene'
+  // Mode
   const [mode, setMode]               = useState('character')
 
   // Player state
@@ -208,17 +219,6 @@ export default function App() {
   const [status, setStatus]           = useState('idle')
   const [error, setError]             = useState(null)
   const [responseData, setResponseData] = useState(null)
-
-  // Fetch character list on mount
-  useEffect(() => {
-    fetch(`/api/characters?series_key=${DEFAULT_SERIES}`)
-      .then(r => r.json())
-      .then(data => { if (data.characters) setCharacters(data.characters) })
-      .catch(() => {
-        // fallback if backend not up yet
-        setCharacters([{ key: 'light_yagami', name: 'Light Yagami', role: 'Protagonist / Kira' }])
-      })
-  }, [])
 
   // Listen for postMessage from VideoDB player
   useEffect(() => {
@@ -231,41 +231,84 @@ export default function App() {
     return () => window.removeEventListener('message', handler)
   }, [])
 
+  useEffect(() => {
+    return () => {
+      if (playerSource.kind === 'video' && playerSource.src.startsWith('blob:')) {
+        URL.revokeObjectURL(playerSource.src)
+      }
+    }
+  }, [playerSource])
+
+  // Fetch characters dynamically when show title changes
+  const fetchCharacters = useCallback(async (title) => {
+    if (!title.trim()) { setCharacters([]); return }
+    setCharsLoading(true)
+    setCharacters([])
+    try {
+      const res = await fetch(`/api/characters?show_title=${encodeURIComponent(title.trim())}`)
+      if (!res.ok) throw new Error('Failed to fetch')
+      const data = await res.json()
+      setCharacters(data.characters || [])
+      // Auto-select first real character
+      const first = (data.characters || []).find(c => c.key !== '__scene__')
+      if (first) setSelectedChar(first.name)
+    } catch {
+      setCharacters([])
+    } finally {
+      setCharsLoading(false)
+    }
+  }, [])
+
   const handleLoadUrl = () => {
-    if (inputUrl.trim()) { setPlayerUrl(inputUrl.trim()); setResponseData(null); setStatus('idle') }
+    if (inputUrl.trim()) {
+      setPlayerSource(normalizeVideoSource(inputUrl))
+      setFileName('')
+      setResponseData(null)
+      setStatus('idle')
+    }
+  }
+
+  const handleFileSelect = (file) => {
+    if (!file) return
+    if (playerSource.kind === 'video' && playerSource.src.startsWith('blob:')) {
+      URL.revokeObjectURL(playerSource.src)
+    }
+    setPlayerSource({ kind: 'video', src: URL.createObjectURL(file) })
+    setFileName(file.name)
+    setInputUrl('')
+    setResponseData(null)
+    setStatus('idle')
+  }
+
+  const handleSetShow = () => {
+    if (showTitle.trim()) fetchCharacters(showTitle.trim())
   }
 
   const onAskClick = () => { setShowModal(true); setStatus('modal') }
   const onClose    = () => { setShowModal(false); setStatus('idle'); setQuestion('') }
 
   const getProcessingLabel = () => {
-    if (mode === 'scene') return 'Scene Companion'
-    if (selectedChar === '__custom__') return customName || 'Character'
-    return characters.find(c => c.key === selectedChar)?.name || 'Character'
+    if (mode === 'scene') return `${showTitle || 'Scene'}`
+    return selectedChar || 'Character'
   }
 
   const onSubmit = async () => {
     if (!question.trim()) return
+    if (!showTitle.trim()) { setError('Enter the show/series title first.'); return }
+
     setStatus('processing')
     setShowModal(false)
     setResponseData(null)
     setError(null)
 
     const body = {
-      timestamp:   pausedAt,
-      question:    question.trim(),
+      timestamp:  pausedAt,
+      question:   question.trim(),
+      show_title: showTitle.trim(),
       mode,
-      series_key:  DEFAULT_SERIES,
     }
-
     if (mode === 'character') {
-      if (selectedChar === '__custom__') {
-        body.character_key = null
-        body.custom_character_name = customName
-        body.custom_character_description = customDesc
-      } else {
-        body.character_key = selectedChar
-      }
+      body.character_name = selectedChar || null
     }
 
     try {
@@ -275,15 +318,14 @@ export default function App() {
         body: JSON.stringify(body),
       })
       if (!res.ok) {
-        const detail = await res.json().catch(() => ({}))
-        throw new Error(detail.detail || `Server error ${res.status}`)
+        const d = await res.json().catch(() => ({}))
+        throw new Error(d.detail || `Error ${res.status}`)
       }
       const data = await res.json()
       setResponseData(data)
-      if (data.player_url) setPlayerUrl(data.player_url)
       setStatus('playing')
     } catch (err) {
-      setError(err.message || 'Something went wrong — try a different moment')
+      setError(err.message || 'Something went wrong')
       setStatus('idle')
     } finally {
       setQuestion('')
@@ -295,22 +337,72 @@ export default function App() {
       <TopBar status={status} />
 
       <main className="player-area">
-        {/* URL row */}
-        <div className="url-row">
-          <input
-            className="url-input"
-            type="text"
-            placeholder="Paste a VideoDB player URL or stream URL..."
-            value={inputUrl}
-            onChange={e => setInputUrl(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && handleLoadUrl()}
-          />
-          <button className="url-load-btn" onClick={handleLoadUrl}>Load →</button>
+        {/* URL + Show Title row */}
+        <div className="config-row">
+          <div className="config-field">
+            <label className="config-label">Video URL</label>
+            <div className="config-input-row">
+              <input
+                className="url-input"
+                type="text"
+                placeholder="Paste any video URL..."
+                value={inputUrl}
+                onChange={e => setInputUrl(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleLoadUrl()}
+              />
+              <button className="url-load-btn" onClick={handleLoadUrl}>Load</button>
+              <label className="file-load-btn">
+                File
+                <input
+                  type="file"
+                  accept="video/*"
+                  onChange={e => handleFileSelect(e.target.files?.[0])}
+                />
+              </label>
+            </div>
+          </div>
+          <div className="config-field">
+            <label className="config-label">Show / Series</label>
+            <div className="config-input-row">
+              <input
+                className="url-input"
+                type="text"
+                placeholder="e.g. Death Note, Mirzapur, Young Sheldon..."
+                value={showTitle}
+                onChange={e => setShowTitle(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleSetShow()}
+              />
+              <button
+                className="url-load-btn"
+                onClick={handleSetShow}
+                disabled={charsLoading}
+              >
+                {charsLoading ? '...' : 'Set'}
+              </button>
+            </div>
+          </div>
         </div>
 
-        {error && <p className="error-msg">{error}</p>}
+        {/* Character chips (dynamic) */}
+        {characters.length > 0 && (
+          <div className="char-chips">
+            {characters.filter(c => c.key !== '__scene__').map(c => (
+              <button
+                key={c.key}
+                className={`char-chip ${selectedChar === c.name ? 'active' : ''}`}
+                onClick={() => setSelectedChar(c.name)}
+                title={c.role}
+              >
+                {c.name}
+              </button>
+            ))}
+          </div>
+        )}
 
-        {/* Response card */}
+        {error && <p className="error-msg">{error}</p>}
+        {fileName && <p className="source-note">Loaded local file: {fileName}</p>}
+
+        {/* Response */}
         {responseData && status === 'playing' && (
           <ResponseCard
             responder={responseData.responder}
@@ -322,7 +414,7 @@ export default function App() {
 
         {/* Player */}
         <PlayerWrapper
-          url={playerUrl}
+          source={playerSource}
           status={status}
           processingLabel={getProcessingLabel()}
           onAskClick={onAskClick}
@@ -333,9 +425,8 @@ export default function App() {
       {showModal && (
         <AskModal
           mode={mode}                     onModeChange={setMode}
-          characters={characters}         selectedChar={selectedChar}    onCharChange={setSelectedChar}
-          customName={customName}         onCustomName={setCustomName}
-          customDesc={customDesc}         onCustomDesc={setCustomDesc}
+          characters={characters}         charsLoading={charsLoading}
+          selectedChar={selectedChar}     onCharChange={setSelectedChar}
           timestamp={pausedAt}            onTimestampChange={setPausedAt}
           question={question}             onQuestionChange={setQuestion}
           onSubmit={onSubmit}             onClose={onClose}
