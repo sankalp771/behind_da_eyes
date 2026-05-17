@@ -1,0 +1,12 @@
+{
+    "video_id": "m-z-019e30a2-7ff1-7e51-9b19-653edfda6fb7",
+    "scene_index_id": "be853dd0ff31d3b0",
+    "light_yagami": {
+        "name": "Light Yagami",
+        "description": "A genius who believes he is a god of justice. Calculating, cold, charismatic. He eliminates threats with zero hesitation and justifies everything through his vision of a perfect world.",
+        "video_prompt": "Light Yagami anime character, extreme close-up, staring directly into camera, intense calculating eyes, dramatic chiaroscuro lighting, Death Note anime style, dark background, cinematic, high detail",
+        "voice_ref_id": "a-z-019e30aa-dab0-78b1-a862-b0b2172b17f7",
+        "voice_ref_text": "Sample reference text for the audio clip"
+    },
+    "sandbox_id": "bx-209aa2e77814446b"
+}
