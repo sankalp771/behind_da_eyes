@@ -162,9 +162,9 @@ function AskModal({
 }
 
 // ── Player Wrapper ────────────────────────────────────────────────────────────
-function PlayerWrapper({ url, status, processingLabel, onAskClick }) {
+function PlayerWrapper({ url, status, processingLabel, onAskClick, responseReady }) {
   return (
-    <div className="player-wrapper">
+    <div className={`player-wrapper${responseReady ? ' response-ready' : ''}`}>
       {url ? (
         <iframe className="player-iframe" src={url} allow="autoplay; fullscreen" allowFullScreen title="CharacterOS Player" />
       ) : (
@@ -326,6 +326,7 @@ export default function App() {
           status={status}
           processingLabel={getProcessingLabel()}
           onAskClick={onAskClick}
+          responseReady={status === 'playing'}
         />
       </main>
 
