@@ -4,12 +4,12 @@ _Last updated: 2026-05-17_
 
 ## Current Product
 
-BehindTheEyes is a text-only companion for watching video. A user loads a video/player, enters the show or series title, picks a character, pauses at a timestamp, and asks either:
+BehindTheEyes is a companion for watching video. The current demo is text-first: a user loads a video/player, enters the show or series title, picks a character, pauses at a timestamp, and asks either:
 
 - a character, who answers in-character using model knowledge plus the current scene context
 - a scene companion, who explains context, subtext, and what the viewer may be missing
 
-The demo scope is deliberately text-only. Voice, generated video responses, and timeline composition are not part of the hackathon demo.
+Voice response is now shown as a clearly labeled beta path based on VideoDB mentor feedback. It is not yet a completed audio feature: the beta tab currently returns the grounded text response while audio generation and playback are being wired.
 
 ## What Works Now
 
@@ -20,6 +20,7 @@ The demo scope is deliberately text-only. Voice, generated video responses, and 
 - Real scene lookup by `start`/`end` ranges in `video.get_scene_index(...)`
 - Transcript window lookup from the last 60 seconds before the selected timestamp
 - Character mode and scene mode
+- Voice Beta tab in the ask modal, with an in-product note that audio response is in progress
 - YouTube watch links normalized to embeddable player links in the frontend
 - Local file playback option in the frontend for demo viewing
 
@@ -39,6 +40,7 @@ These IDs live in `backend/config.json`.
 - The backend does not yet ingest a new URL or uploaded file from the UI.
 - Loading a different YouTube/local video in the frontend only changes playback. Q&A still uses the active VideoDB IDs unless the backend config or request IDs are changed.
 - Character generation is dynamic from show title, but it depends on model knowledge and prompt quality; it is not a fully verified character database.
+- Voice Beta does not yet generate playable audio. It is a visible product direction, not a finished demo feature.
 - Scene index quality depends on the existing indexing interval and prompt. The current index is useful, but not a precise shot-by-shot cinematic timeline.
 - External iframes do not reliably emit pause timestamps, so the timestamp remains manually editable.
 
@@ -50,10 +52,22 @@ These IDs live in `backend/config.json`.
 | `video.get_scene_index(scene_index_id)` | Retrieve visual scene descriptions |
 | `video.get_transcript()` | Retrieve dialogue around the selected timestamp |
 
+## Mentor Suggestion: Voice Response
+
+VideoDB mentor feedback suggested making the character response feel more alive with voice. The UI now exposes this as `Voice Beta` so judges can see the intended direction without confusing it with a completed capability.
+
+Planned implementation:
+
+1. Generate the same grounded character response text.
+2. Send that response to a VideoDB-compatible voice generation path.
+3. Return an audio/stream URL with the text response.
+4. Add playback controls in the response card.
+
 ## Next Work
 
 1. Add a backend ingest endpoint for URL and file upload using `coll.upload(url=...)` or `coll.upload(file_path=...)`.
 2. After ingest, run `video.index_spoken_words(force=True)` and `video.index_scenes(...)`, then return `video_id`, `scene_index_id`, and a VideoDB player URL.
 3. Wire the frontend Load/File controls to that ingest endpoint so playback and Q&A use the same asset.
 4. Add an evidence/debug panel showing the exact scene range and transcript window used for each answer.
-5. Keep pitch language aligned to the shipped text-only product unless voice/video generation is restored and demo-proven.
+5. Implement Voice Beta end-to-end with generated audio and response-card playback.
+6. Keep pitch language aligned to the shipped product unless voice/video generation is demo-proven.

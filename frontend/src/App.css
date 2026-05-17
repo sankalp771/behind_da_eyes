@@ -345,6 +345,9 @@
 .response-card--scene {
   border-color: rgba(120,180,255,0.35);
 }
+.response-card--voice {
+  border-color: rgba(154,220,180,0.38);
+}
 
 @keyframes slide-in {
   from { opacity: 0; transform: translateY(-8px); }
@@ -370,6 +373,7 @@
   text-transform: uppercase;
 }
 .response-card--scene .response-name { color: #7ab4ff; }
+.response-card--voice .response-name { color: #9adcb4; }
 
 .response-mode-badge {
   font-size: 10px;
@@ -387,6 +391,11 @@
   color: #7ab4ff;
   border-color: rgba(120,180,255,0.25);
 }
+.response-card--voice .response-mode-badge {
+  background: rgba(154,220,180,0.1);
+  color: #9adcb4;
+  border-color: rgba(154,220,180,0.28);
+}
 
 .response-close {
   color: var(--text-dim);
@@ -403,6 +412,12 @@
   line-height: 1.75;
   color: #d8d8d8;
   font-style: italic;
+}
+.voice-beta-note {
+  color: #9adcb4;
+  font-size: 12px;
+  line-height: 1.5;
+  margin-bottom: 8px;
 }
 
 /* ── Ask Modal ───────────────────────────────────────────────────────────── */
@@ -486,6 +501,12 @@
   color: var(--gold);
 }
 .mode-btn:hover:not(.active) { color: var(--text); background: rgba(255,255,255,0.05); }
+.mode-btn--beta span {
+  color: #9adcb4;
+  font-size: 9px;
+  margin-left: 4px;
+  text-transform: uppercase;
+}
 
 /* ── Character select ────────────────────────────────────────────────────── */
 .modal-char-row { margin-bottom: 12px; }
@@ -540,6 +561,16 @@
   background: rgba(120,180,255,0.04);
   border-radius: 7px;
   border-left: 2px solid rgba(120,180,255,0.3);
+}
+.voice-hint {
+  font-size: 12px;
+  color: var(--text-dim);
+  line-height: 1.55;
+  margin-bottom: 12px;
+  padding: 9px 12px;
+  background: rgba(154,220,180,0.05);
+  border-radius: 7px;
+  border-left: 2px solid rgba(154,220,180,0.35);
 }
 
 /* ── Timestamp row ───────────────────────────────────────────────────────── */

@@ -258,6 +258,68 @@ Rules:
     return _dedupe_characters(wiki_characters + model_characters)
 
 
+def _clip_text(text: str, limit: int) -> str:
+    text = re.sub(r"\s+", " ", text or "").strip()
+    return text[:limit]
+
+
+def build_style_guide_prompt(show_title: str, char_name: str, transcript_sample: str) -> str:
+    return f"""Create a compact speaking-style guide for {char_name} from "{show_title}".
+
+Use your knowledge of the show and, when useful, this transcript sample:
+{_clip_text(transcript_sample, 6000)}
+
+Return only this structure:
+VOCAB:
+- 4-6 words or phrases this character would naturally use
+SENTENCE SHAPE:
+- short notes on sentence length, rhythm, directness, language mix
+ATTITUDE:
+- short notes on confidence, aggression, warmth, humor, restraint
+AVOID:
+- 4 generic patterns that would sound unlike this character
+
+Keep it specific and usable for rewriting. Do not invent catchphrases unless the character is known for them."""
+
+
+def build_character_style_rewrite_prompt(
+    show_title: str,
+    char_name: str,
+    question: str,
+    scene: str,
+    transcript: str,
+    draft_response: str,
+    style_guide: str,
+) -> str:
+    return f"""Rewrite this answer so it sounds more like {char_name} from "{show_title}".
+
+STYLE GUIDE:
+{style_guide}
+
+CURRENT SCENE:
+{_clip_text(scene, 1600)}
+
+RECENT DIALOGUE:
+{_clip_text(transcript, 1600)}
+
+USER ASKED:
+"{question}"
+
+DRAFT ANSWER:
+{draft_response}
+
+Rules:
+- Preserve the exact intent and facts of the draft.
+- Make the vocabulary, sentence rhythm, confidence level, and language mix feel like {char_name}.
+- Stay natural for a live conversation, not a dramatic monologue.
+- Do not add new plot facts.
+- Do not quote copyrighted dialogue from the show.
+- Do not mention style guides, rewriting, AI, or prompts.
+- 3-5 sentences.
+
+Return only the rewritten answer."""
+
+
 def build_character_prompt(
     show_title: str,
     char_name: str,

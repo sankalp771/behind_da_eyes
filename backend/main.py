@@ -14,7 +14,13 @@ from dotenv import load_dotenv
 from videodb import connect
 
 from videodb_utils import get_context_at_timestamp
-from engine import generate_character_list, build_character_prompt, build_scene_prompt
+from engine import (
+    generate_character_list,
+    build_character_prompt,
+    build_scene_prompt,
+    build_style_guide_prompt,
+    build_character_style_rewrite_prompt,
+)
 
 load_dotenv()
 
@@ -34,12 +40,51 @@ _default_video = coll.get_video(config["video_id"])
 
 # In-memory cache for character lists (keyed by show_title)
 _char_cache: dict = {}
+_style_cache: dict = {}
 
 
 def _get_video(video_id: str):
     if video_id == config["video_id"]:
         return _default_video
     return coll.get_video(video_id)
+
+
+def _get_transcript_text(video) -> str:
+    try:
+        if hasattr(video, "get_transcript_text"):
+            text = video.get_transcript_text()
+            if text:
+                return str(text)
+    except Exception:
+        pass
+
+    try:
+        transcript_lines = video.get_transcript()
+    except Exception:
+        return ""
+
+    return " ".join(
+        (line.get("text") or getattr(line, "text", "")).strip()
+        for line in transcript_lines
+    )
+
+
+def _generate_text(prompt: str) -> str:
+    result = coll.generate_text(prompt=prompt, model_name="ultra")
+    return (result.get("output", "") if isinstance(result, dict) else str(result)).strip()
+
+
+def _get_style_guide(video, show_title: str, char_name: str) -> str:
+    cache_key = f"{show_title.strip().lower()}::{char_name.strip().lower()}"
+    if cache_key in _style_cache:
+        return _style_cache[cache_key]
+
+    transcript_sample = _get_transcript_text(video)
+    prompt = build_style_guide_prompt(show_title, char_name, transcript_sample)
+    style_guide = _generate_text(prompt)
+    if style_guide:
+        _style_cache[cache_key] = style_guide
+    return style_guide
 
 
 # ── Request Models ─────────────────────────────────────────────────────────────
@@ -73,14 +118,32 @@ async def ask(req: AskRequest):
 
         if req.mode == "scene":
             prompt    = build_scene_prompt(req.show_title, scene, transcript, req.question)
+            response_text = _generate_text(prompt)
             responder = f"{req.show_title} — Scene"
         else:
             char_name = req.character_name or "the main character"
             prompt    = build_character_prompt(req.show_title, char_name, scene, transcript, req.question)
+            response_text = _generate_text(prompt)
             responder = char_name
 
-        result = coll.generate_text(prompt=prompt, model_name="ultra")
-        response_text = (result.get("output", "") if isinstance(result, dict) else str(result)).strip()
+            try:
+                style_guide = _get_style_guide(video, req.show_title, char_name)
+                if style_guide:
+                    rewrite_prompt = build_character_style_rewrite_prompt(
+                        req.show_title,
+                        char_name,
+                        req.question,
+                        scene,
+                        transcript,
+                        response_text,
+                        style_guide,
+                    )
+                    styled = _generate_text(rewrite_prompt)
+                    if styled:
+                        response_text = styled
+            except Exception:
+                # Style adaptation should never block the core answer path.
+                pass
 
         return {
             "response":   response_text,
@@ -132,6 +195,7 @@ async def get_characters(
 async def clear_character_cache():
     """Clear the in-memory character cache (useful when switching shows)."""
     _char_cache.clear()
+    _style_cache.clear()
     return {"status": "cleared"}
 
 

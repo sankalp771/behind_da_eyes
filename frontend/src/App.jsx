@@ -55,15 +55,20 @@ function ProcessingOverlay({ label }) {
 
 // ── Response Card ────────────────────────────────────────────────────────────
 function ResponseCard({ responder, mode, response, onDismiss }) {
+  const badge = mode === 'scene' ? 'scene' : mode === 'voice' ? 'voice beta' : 'in character'
+
   return (
-    <div className={`response-card ${mode === 'scene' ? 'response-card--scene' : ''}`}>
+    <div className={`response-card ${mode === 'scene' ? 'response-card--scene' : mode === 'voice' ? 'response-card--voice' : ''}`}>
       <div className="response-header">
         <div className="response-meta">
           <span className="response-name">{responder}</span>
-          <span className="response-mode-badge">{mode === 'scene' ? 'scene' : 'in character'}</span>
+          <span className="response-mode-badge">{badge}</span>
         </div>
         <button className="response-close" onClick={onDismiss}>×</button>
       </div>
+      {mode === 'voice' && (
+        <p className="voice-beta-note">Voice response is in progress. Showing the text response for this demo build.</p>
+      )}
       <p className="response-text">{response}</p>
     </div>
   )
@@ -103,10 +108,13 @@ function AskModal({
           <button className={`mode-btn ${mode === 'scene' ? 'active' : ''}`} onClick={() => onModeChange('scene')}>
             Scene
           </button>
+          <button className={`mode-btn mode-btn--beta ${mode === 'voice' ? 'active' : ''}`} onClick={() => onModeChange('voice')}>
+            Voice <span>Beta</span>
+          </button>
         </div>
 
         {/* Character selector */}
-        {mode === 'character' && (
+        {(mode === 'character' || mode === 'voice') && (
           <div className="modal-char-row">
             {charsLoading ? (
               <div className="chars-loading">Finding characters from Wikipedia and model knowledge...</div>
@@ -129,6 +137,12 @@ function AskModal({
               </select>
             )}
           </div>
+        )}
+
+        {mode === 'voice' && (
+          <p className="voice-hint">
+            Voice response is a VideoDB mentor suggestion and is still in progress. This beta path currently generates the same grounded text answer while audio generation and playback are being wired.
+          </p>
         )}
 
         {/* Scene mode hint */}
@@ -289,6 +303,7 @@ export default function App() {
 
   const getProcessingLabel = () => {
     if (mode === 'scene') return `${showTitle || 'Scene'}`
+    if (mode === 'voice') return `${selectedChar || 'Character'} voice beta`
     return selectedChar || 'Character'
   }
 
@@ -305,9 +320,9 @@ export default function App() {
       timestamp:  pausedAt,
       question:   question.trim(),
       show_title: showTitle.trim(),
-      mode,
+      mode:       mode === 'voice' ? 'character' : mode,
     }
-    if (mode === 'character') {
+    if (mode === 'character' || mode === 'voice') {
       body.character_name = selectedChar || null
     }
 
@@ -322,7 +337,7 @@ export default function App() {
         throw new Error(d.detail || `Error ${res.status}`)
       }
       const data = await res.json()
-      setResponseData(data)
+      setResponseData(mode === 'voice' ? { ...data, mode: 'voice' } : data)
       setStatus('playing')
     } catch (err) {
       setError(err.message || 'Something went wrong')
