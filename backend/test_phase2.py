@@ -26,9 +26,9 @@ def run_test():
     
     video = coll.get_video(video_id)
 
-    # Simulate user pausing at 1:36 (96 seconds)
-    timestamp = 96
-    user_question = "Why are you working with your father instead of taking him out right now?"
+    # Simulate user pausing at 20:00 (1200 seconds)
+    timestamp = 1200
+    user_question = "Why do you need to eliminate Naomi Misora asap?"
 
     print(f"--- Simulating Request at {timestamp}s ---")
     print(f"User Question: '{user_question}'\n")
