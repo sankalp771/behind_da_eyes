@@ -6,6 +6,10 @@ BehindTheEyes uses [VideoDB](https://videodb.io) to index any video — transcri
 
 Works for any show: Death Note, Mirzapur, Young Sheldon, Breaking Bad — anything.
 
+## screenshots : harshad mehta example
+<img width="586" height="650" alt="Screenshot 2026-05-17 185748" src="https://github.com/user-attachments/assets/8b00a478-52ec-4784-8f39-bab144ad9e16" />
+<img width="1234" height="822" alt="Screenshot 2026-05-17 191350" src="https://github.com/user-attachments/assets/ff55224f-24a6-408c-a7ac-7d5341b5f65d" />
+
 ---
 
 ## How It Works
